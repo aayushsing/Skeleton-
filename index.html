@@ -2,113 +2,184 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>3D Skeleton Learning</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>3D Skeleton Teaching</title>
+  <script type="module" src="https://unpkg.com/@google/model-viewer/dist/model-viewer.min.js"></script>
   <style>
-    *{margin:0;padding:0;box-sizing:border-box}
     body {
-      background:black;
-      font-family:'Poppins',sans-serif;
-      color:white;
-      overflow:hidden;
-      display:flex;
-      flex-direction:row;
+      margin: 0;
+      background: black;
+      color: white;
+      font-family: Arial, sans-serif;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
     }
-    #sidebar {
-      width:250px;
-      height:100vh;
-      background:rgba(0,0,0,0.8);
-      overflow-y:auto;
-      padding:10px;
-      display:flex;
-      flex-direction:column;
+    header {
+      text-align: center;
+      padding: 10px;
+      background: #111;
     }
-    #sidebar h2 { font-size:18px; margin:10px 0; }
-    .bone-item {
-      padding:6px 8px;
-      margin:2px 0;
-      border-radius:6px;
-      cursor:pointer;
-      transition:0.3s;
+    model-viewer {
+      flex: 1;
+      width: 100%;
+      height: 100%;
+      background: black;
     }
-    .bone-item:hover {
-      background:#00eaff;
-      color:black;
+    .controls {
+      display: flex;
+      justify-content: center;
+      gap: 10px;
+      padding: 10px;
+      background: #111;
     }
-    #main {
-      flex:1;
-      position:relative;
+    select, button {
+      padding: 8px;
+      border-radius: 6px;
+      border: none;
+      font-size: 14px;
     }
-    #menu {
-      position:absolute;
-      top:10px;
-      left:10px;
-      background:rgba(0,0,0,0.6);
-      padding:10px;
-      border-radius:12px;
+    .bone-list {
+      max-height: 220px;
+      overflow-y: auto;
+      background: #222;
+      padding: 10px;
+      font-size: 14px;
     }
-    select,button {
-      margin:5px;
-      padding:6px 10px;
-      border-radius:6px;
-      border:none;
-      background:#222;
-      color:white;
+    .bone-list div {
+      padding: 5px;
+      border-bottom: 1px solid #444;
+      cursor: pointer;
     }
-    select:hover,button:hover { background:#444; }
-    canvas { width:100%; height:100%; display:block; }
-    @media(max-width:768px){
-      body{ flex-direction:column; }
-      #sidebar{ width:100%; height:200px; flex-direction:row; overflow-x:auto; overflow-y:hidden; }
-      .bone-item{ flex:0 0 auto; margin:2px; }
+    .bone-list div:hover {
+      background: #333;
     }
   </style>
 </head>
 <body>
-  <div id="sidebar">
-    <h2>Bone List</h2>
-    <div id="boneList"></div>
+  <header>
+    <h1>🦴 Human Skeleton Teaching</h1>
+  </header>
+
+  <!-- Skeleton 3D Model -->
+  <model-viewer id="skeletonViewer"
+    src="https://modelviewer.dev/shared-assets/models/HumanSkeleton.glb"
+    alt="Human Skeleton"
+    ar
+    auto-rotate
+    camera-controls
+    shadow-intensity="1"
+    exposure="1.2"
+    style="background:black;">
+  </model-viewer>
+
+  <!-- Controls -->
+  <div class="controls">
+    <select id="modeSelect">
+      <option value="easy">Easy Mode</option>
+      <option value="hard">Hard Mode</option>
+    </select>
+    <select id="languageSelect">
+      <option value="en">English</option>
+      <option value="hi">हिन्दी</option>
+    </select>
+    <button onclick="speakSelected()">🔊 Speak</button>
   </div>
 
-  <div id="main">
-    <div id="menu">
-      <select id="modelSelect">
-        <option value="male">Male Skeleton</option>
-        <option value="female">Female Skeleton</option>
-      </select>
-      <select id="langSelect">
-        <option value="en">English</option>
-        <option value="hi">हिंदी</option>
-      </select>
-      <select id="modeSelect">
-        <option value="easy">Easy</option>
-        <option value="medium">Medium</option>
-        <option value="hard">Hard</option>
-      </select>
-      <button onclick="toggleMusic()">🎵</button>
-    </div>
-    <canvas id="canvas"></canvas>
-    <audio id="bgMusic" loop autoplay>
-      <source src="https://www.bensound.com/bensound-music/bensound-relaxing.mp3" type="audio/mpeg">
-    </audio>
-  </div>
+  <!-- Bone List -->
+  <div class="bone-list" id="boneList"></div>
 
-  <script src="https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/three@0.152.2/examples/js/loaders/GLTFLoader.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/three@0.152.2/examples/js/controls/OrbitControls.js"></script>
   <script>
-    let scene, camera, renderer, controls, currentModel;
-    let lang="en";
+    // ✅ Easy Mode (main bones only)
+    const easyBones = {
+      en: ["Skull","Mandible","Clavicle","Scapula","Sternum","Ribs","Humerus","Radius","Ulna","Pelvis","Femur","Patella","Tibia","Fibula"],
+      hi: ["खोपड़ी","हनु अस्थि","क्लैविकल","स्कैपुला","उरोस्थि","पसलियां","भुजास्थि","त्रिज्या अस्थि","अल्ना","श्रोणि","जांघ की हड्डी","घुटना अस्थि","टिबिया","फिबुला"]
+    };
 
-    // === Bone Data ===
-    const bonesEasy = [
-      {en:"Head", hi:"सिर"},
-      {en:"Chest", hi:"छाती"},
-      {en:"Arm", hi:"बांह"},
-      {en:"Leg", hi:"टांग"}
-    ];
+    // ✅ Hard Mode (all 206 bones grouped)
+    const hardBones = {
+      en: [
+        // Skull (22)
+        "Frontal Bone","Parietal Bone (Left)","Parietal Bone (Right)","Temporal Bone (Left)","Temporal Bone (Right)",
+        "Occipital Bone","Sphenoid Bone","Ethmoid Bone",
+        "Nasal Bone (2)","Maxilla (2)","Zygomatic Bone (2)","Palatine Bone (2)","Lacrimal Bone (2)","Inferior Nasal Concha (2)","Vomer","Mandible",
+        // Ear (6)
+        "Malleus (2)","Incus (2)","Stapes (2)",
+        // Throat (1)
+        "Hyoid Bone",
+        // Vertebral Column (26)
+        "Cervical Vertebrae (7)","Thoracic Vertebrae (12)","Lumbar Vertebrae (5)","Sacrum","Coccyx",
+        // Thorax (25)
+        "Sternum","Ribs (24)",
+        // Shoulder (4)
+        "Clavicle (2)","Scapula (2)",
+        // Arms (60 total)
+        "Humerus (2)","Radius (2)","Ulna (2)",
+        "Carpals (16)","Metacarpals (10)","Phalanges-Hand (28)",
+        // Pelvis (2)
+        "Hip Bone (2)",
+        // Legs (60 total)
+        "Femur (2)","Patella (2)","Tibia (2)","Fibula (2)",
+        "Tarsals (14)","Metatarsals (10)","Phalanges-Foot (28)"
+      ],
+      hi: [
+        // Skull (22)
+        "ललाट अस्थि","पार्श्व अस्थि (बायां)","पार्श्व अस्थि (दायां)","कर्ण अस्थि (बायां)","कर्ण अस्थि (दायां)",
+        "पश्चकपाल अस्थि","स्फेनॉइड अस्थि","एथमॉइड अस्थि",
+        "नासिका अस्थि (2)","ऊपरी जबड़ा (2)","गाल की अस्थि (2)","तालु अस्थि (2)","अश्रु अस्थि (2)","निचली नासिका शंखिका (2)","वोमर","हनु अस्थि",
+        // Ear (6)
+        "मैलियस (2)","इन्कस (2)","स्टेप्स (2)",
+        // Throat (1)
+        "हायॉइड अस्थि",
+        // Vertebral Column (26)
+        "ग्रीवा कशेरुकाएँ (7)","वक्ष कशेरुकाएँ (12)","कटि कशेरुकाएँ (5)","त्रिकास्थि","पुच्छास्थि",
+        // Thorax (25)
+        "उरोस्थि","पसलियां (24)",
+        // Shoulder (4)
+        "क्लैविकल (2)","स्कैपुला (2)",
+        // Arms (60 total)
+        "भुजास्थि (2)","त्रिज्या अस्थि (2)","अल्ना (2)",
+        "कार्पल अस्थियाँ (16)","मेटाकार्पल अस्थियाँ (10)","हाथ की ऊँगली अस्थियाँ (28)",
+        // Pelvis (2)
+        "श्रोणि अस्थि (2)",
+        // Legs (60 total)
+        "जांघ की हड्डी (2)","घुटना अस्थि (2)","टिबिया (2)","फिबुला (2)",
+        "टार्सल अस्थियाँ (14)","मेटाटार्सल अस्थियाँ (10)","पाँव की ऊँगली अस्थियाँ (28)"
+      ]
+    };
 
-    const bonesMedium = [
+    const boneListDiv = document.getElementById("boneList");
+    const langSelect = document.getElementById("languageSelect");
+    const modeSelect = document.getElementById("modeSelect");
+
+    function loadBones() {
+      boneListDiv.innerHTML = "";
+      let set = (modeSelect.value === "easy") ? easyBones : hardBones;
+      set[langSelect.value].forEach((bone) => {
+        const div = document.createElement("div");
+        div.textContent = bone;
+        div.onclick = () => speak(bone);
+        boneListDiv.appendChild(div);
+      });
+    }
+
+    function speakSelected() {
+      let selected = document.querySelector(".bone-list div:hover");
+      if (selected) speak(selected.textContent);
+    }
+
+    function speak(text) {
+      let utterance = new SpeechSynthesisUtterance(text);
+      utterance.lang = (langSelect.value === "hi") ? "hi-IN" : "en-US";
+      speechSynthesis.speak(utterance);
+    }
+
+    langSelect.addEventListener("change", loadBones);
+    modeSelect.addEventListener("change", loadBones);
+    loadBones();
+  </script>
+</body>
+</html>    const bonesMedium = [
       {en:"Skull", hi:"खोपड़ी"},
       {en:"Spine", hi:"रीढ़ की हड्डी"},
       {en:"Ribs", hi:"पसलियां"},
