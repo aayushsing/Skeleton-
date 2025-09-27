@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>3D Skeleton Learning</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    *{margin:0;padding:0;box-sizing:border-box}
+    body {
+      background:black;
+      font-family:'Poppins',sans-serif;
+      color:white;
+      overflow:hidden;
+      display:flex;
+      flex-direction:row;
+    }
+    #sidebar {
+      width:250px;
+      height:100vh;
+      background:rgba(0,0,0,0.8);
+      overflow-y:auto;
+      padding:10px;
+      display:flex;
+      flex-direction:column;
+    }
+    #sidebar h2 { font-size:18px; margin:10px 0; }
+    .bone-item {
+      padding:6px 8px;
+      margin:2px 0;
+      border-radius:6px;
+      cursor:pointer;
+      transition:0.3s;
+    }
+    .bone-item:hover {
+      background:#00eaff;
+      color:black;
+    }
+    #main {
+      flex:1;
+      position:relative;
+    }
+    #menu {
+      position:absolute;
+      top:10px;
+      left:10px;
+      background:rgba(0,0,0,0.6);
+      padding:10px;
+      border-radius:12px;
+    }
+    select,button {
+      margin:5px;
+      padding:6px 10px;
+      border-radius:6px;
+      border:none;
+      background:#222;
+      color:white;
+    }
+    select:hover,button:hover { background:#444; }
+    canvas { width:100%; height:100%; display:block; }
+    @media(max-width:768px){
+      body{ flex-direction:column; }
+      #sidebar{ width:100%; height:200px; flex-direction:row; overflow-x:auto; overflow-y:hidden; }
+      .bone-item{ flex:0 0 auto; margin:2px; }
+    }
+  </style>
+</head>
+<body>
+  <div id="sidebar">
+    <h2>Bone List</h2>
+    <div id="boneList"></div>
+  </div>
+
+  <div id="main">
+    <div id="menu">
+      <select id="modelSelect">
+        <option value="male">Male Skeleton</option>
+        <option value="female">Female Skeleton</option>
+      </select>
+      <select id="langSelect">
+        <option value="en">English</option>
+        <option value="hi">हिंदी</option>
+      </select>
+      <select id="modeSelect">
+        <option value="easy">Easy</option>
+        <option value="medium">Medium</option>
+        <option value="hard">Hard</option>
+      </select>
+      <button onclick="toggleMusic()">🎵</button>
+    </div>
+    <canvas id="canvas"></canvas>
+    <audio id="bgMusic" loop autoplay>
+      <source src="https://www.bensound.com/bensound-music/bensound-relaxing.mp3" type="audio/mpeg">
+    </audio>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.152.2/examples/js/loaders/GLTFLoader.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.152.2/examples/js/controls/OrbitControls.js"></script>
+  <script>
+    let scene, camera, renderer, controls, currentModel;
+    let lang="en";
+
+    // === Bone Data ===
+    const bonesEasy = [
+      {en:"Head", hi:"सिर"},
+      {en:"Chest", hi:"छाती"},
+      {en:"Arm", hi:"बांह"},
+      {en:"Leg", hi:"टांग"}
+    ];
+
+    const bonesMedium = [
+      {en:"Skull", hi:"खोपड़ी"},
+      {en:"Spine", hi:"रीढ़ की हड्डी"},
+      {en:"Ribs", hi:"पसलियां"},
+      {en:"Pelvis", hi:"श्रोणि"},
+      {en:"Femur", hi:"जांघ की हड्डी"},
+      {en:"Humerus", hi:"भुजा की हड्डी"},
+      {en:"Radius", hi:"त्रिज्या अस्थि"},
+      {en:"Ulna", hi:"अल्ना"},
+      {en:"Tibia", hi:"टिबिया"},
+      {en:"Fibula", hi:"फिबुला"}
+    ];
+
+    const bonesHard = [
+      // Skull (22)
+      {en:"Frontal Bone", hi:"ललाट अस्थि"},
+      {en:"Parietal Bone (Left)", hi:"पार्श्व अस्थि (बायां)"},
+      {en:"Parietal Bone (Right)", hi:"पार्श्व अस्थि (दायां)"},
+      {en:"Temporal Bone (Left)", hi:"कर्णास्थि (बायां)"},
+      {en:"Temporal Bone (Right)", hi:"कर्णास्थि (दायां)"},
+      {en:"Occipital Bone", hi:"पश्चकपाल अस्थि"},
+      {en:"Sphenoid Bone", hi:"कीलाकार अस्थि"},
+      {en:"Ethmoid Bone", hi:"जालिका अस्थि"},
+      {en:"Nasal Bone (2)", hi:"नासिका अस्थि (2)"},
+      {en:"Maxilla (2)", hi:"अधिकतम अस्थि (2)"},
+      {en:"Zygomatic Bone (2)", hi:"गाल अस्थि (2)"},
+      {en:"Palatine Bone (2)", hi:"तालु अस्थि (2)"},
+      {en:"Lacrimal Bone (2)", hi:"अश्रु अस्थि (2)"},
+      {en:"Inferior Nasal Concha (2)", hi:"निचला नासिका शंख (2)"},
+      {en:"Vomer", hi:"वोमर"},
+      {en:"Mandible", hi:"हनु अस्थि"},
+
+      // Ear Ossicles (6)
+      {en:"Malleus (2)", hi:"मैलियस (2)"},
+      {en:"Incus (2)", hi:"इंकस (2)"},
+      {en:"Stapes (2)", hi:"स्टेप्स (2)"},
+
+      // Hyoid
+      {en:"Hyoid Bone", hi:"हायॉइड अस्थि"},
+
+      // Spine (26)
+      {en:"Cervical Vertebrae (7)", hi:"गर्दन कशेरुक (7)"},
+      {en:"Thoracic Vertebrae (12)", hi:"वक्ष कशेरुक (12)"},
+      {en:"Lumbar Vertebrae (5)", hi:"कटि कशेरुक (5)"},
+      {en:"Sacrum", hi:"त्रिकास्थि"},
+      {en:"Coccyx", hi:"पुच्छास्थि"},
+
+      // Thorax (25)
+      {en:"Sternum", hi:"उरोस्थि"},
+      {en:"Ribs (24)", hi:"पसलियां (24)"},
+
+      // Shoulder Girdle (4)
+      {en:"Clavicle (2)", hi:"हंसली (2)"},
+      {en:"Scapula (2)", hi:"अंसपटल (2)"},
+
+      // Arm & Forearm
+      {en:"Humerus (2)", hi:"भुजा अस्थि (2)"},
+      {en:"Radius (2)", hi:"त्रिज्या अस्थि (2)"},
+      {en:"Ulna (2)", hi:"अल्ना (2)"},
+
+      // Hands (54)
+      {en:"Carpals (16)", hi:"कलाई अस्थि (16)"},
+      {en:"Metacarpals (10)", hi:"अंगुली मध्य अस्थि (10)"},
+      {en:"Phalanges (28)", hi:"अंगुली अस्थि (28)"},
+
+      // Pelvis
+      {en:"Hip Bone (2)", hi:"श्रोणि अस्थि (2)"},
+
+      // Legs
+      {en:"Femur (2)", hi:"जांघ अस्थि (2)"},
+      {en:"Patella (2)", hi:"घुटना अस्थि (2)"},
+      {en:"Tibia (2)", hi:"टिबिया (2)"},
+      {en:"Fibula (2)", hi:"फिबुला (2)"},
+
+      // Feet (52)
+      {en:"Tarsals (14)", hi:"एड़ी अस्थि (14)"},
+      {en:"Metatarsals (10)", hi:"पैर मध्य अस्थि (10)"},
+      {en:"Phalanges (28)", hi:"पैर की अंगुली अस्थि (28)"}
+    ];
+
+    function populateBoneList(mode){
+      const boneList=document.getElementById("boneList");
+      boneList.innerHTML="";
+      let dataset=(mode==="easy")?bonesEasy:(mode==="medium")?bonesMedium:bonesHard;
+      dataset.forEach(b=>{
+        const div=document.createElement("div");
+        div.className="bone-item";
+        div.textContent=(lang==="en")?b.en:b.hi;
+        div.onclick=()=>speak(div.textContent);
+        boneList.appendChild(div);
+      });
+    }
+
+    function speak(text){
+      let utter=new SpeechSynthesisUtterance(text);
+      utter.lang=(lang==="en")?"en-US":"hi-IN";
+      speechSynthesis.speak(utter);
+    }
+
+    function init(){
+      scene=new THREE.Scene();
+      camera=new THREE.PerspectiveCamera(60,window.innerWidth/window.innerHeight,0.1,100);
+      camera.position.set(0,1.6,3);
+
+      renderer=new THREE.WebGLRenderer({canvas:document.getElementById("canvas"),antialias:true});
+      renderer.setSize(window.innerWidth,window.innerHeight);
+
+      controls=new THREE.OrbitControls(camera,renderer.domElement);
+
+      const light=new THREE.HemisphereLight(0xffffff,0x222222,1.2);
+      scene.add(light);
+
+      animate();
+      window.addEventListener("resize",()=>renderer.setSize(window.innerWidth,window.innerHeight));
+    }
+
+    function loadModel(type){
+      if(currentModel){ scene.remove(currentModel); }
+      const loader=new THREE.GLTFLoader();
+      const url=(type==="male")
+        ?"https://threejs.org/examples/models/gltf/HumanSkeleton.glb"
+        :"https://threejs.org/examples/models/gltf/FemaleSkeleton.glb";
+
+      loader.load(url,(gltf)=>{
+        currentModel=gltf.scene;
+        scene.add(currentModel);
+      });
+    }
+
+    function animate(){
+      requestAnimationFrame(animate);
+      renderer.render(scene,camera);
+    }
+
+    // === Init ===
+    init();
+    loadModel("male");
+    populateBoneList("easy");
+
+    // === UI Handlers ===
+    document.getElementById("modelSelect").onchange=(e)=> loadModel(e.target.value);
+    document.getElementById("langSelect").onchange=(e)=>{lang=e.target.value; populateBoneList(document.getElementById("modeSelect").value);}
+    document.getElementById("modeSelect").onchange=(e)=> populateBoneList(e.target.value);
+
+    function toggleMusic(){
+      let m=document.getElementById("bgMusic");
+      if(m.paused){m.play();} else {m.pause();}
+    }
+  </script>
+</body>
+  </html>
