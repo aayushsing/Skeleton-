@@ -4,329 +4,219 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>3D Skeleton Teaching</title>
-  <script type="module" src="https://unpkg.com/@google/model-viewer/dist/model-viewer.min.js"></script>
   <style>
     body {
       margin: 0;
+      overflow: hidden;
       background: black;
-      color: white;
       font-family: Arial, sans-serif;
-      display: flex;
-      flex-direction: column;
-      height: 100vh;
+      color: white;
     }
-    header {
-      text-align: center;
-      padding: 10px;
-      background: #111;
+    #ui {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      z-index: 10;
+      background: rgba(0,0,0,0.6);
+      padding: 12px;
+      border-radius: 10px;
+      max-width: 300px;
     }
-    model-viewer {
-      flex: 1;
-      width: 100%;
-      height: 100%;
-      background: black;
+    #boneList {
+      max-height: 250px;
+      overflow-y: auto;
+      margin-top: 10px;
+      font-size: 14px;
     }
-    .controls {
-      display: flex;
-      justify-content: center;
-      gap: 10px;
-      padding: 10px;
-      background: #111;
-    }
-    select, button {
-      padding: 8px;
+    button, select {
+      margin: 5px 0;
+      padding: 6px 10px;
       border-radius: 6px;
       border: none;
-      font-size: 14px;
-    }
-    .bone-list {
-      max-height: 220px;
-      overflow-y: auto;
-      background: #222;
-      padding: 10px;
-      font-size: 14px;
-    }
-    .bone-list div {
-      padding: 5px;
-      border-bottom: 1px solid #444;
+      background: #1e1e1e;
+      color: white;
       cursor: pointer;
     }
-    .bone-list div:hover {
-      background: #333;
+    button:hover, select:hover {
+      background: #444;
+    }
+    canvas {
+      display: block;
     }
   </style>
 </head>
 <body>
-  <header>
-    <h1>🦴 Human Skeleton Teaching</h1>
-  </header>
-
-  <!-- Skeleton 3D Model -->
-  <model-viewer id="skeletonViewer"
-    src="https://modelviewer.dev/shared-assets/models/HumanSkeleton.glb"
-    alt="Human Skeleton"
-    ar
-    auto-rotate
-    camera-controls
-    shadow-intensity="1"
-    exposure="1.2"
-    style="background:black;">
-  </model-viewer>
-
-  <!-- Controls -->
-  <div class="controls">
-    <select id="modeSelect">
-      <option value="easy">Easy Mode</option>
-      <option value="hard">Hard Mode</option>
+  <div id="ui">
+    <h2>🦴 Skeleton Teacher</h2>
+    <label>Mode: </label>
+    <select id="mode">
+      <option value="easy">Easy (Main Bones)</option>
+      <option value="hard">Hard (All 206 Bones)</option>
     </select>
-    <select id="languageSelect">
+    <br>
+    <label>Language: </label>
+    <select id="language">
       <option value="en">English</option>
       <option value="hi">हिन्दी</option>
     </select>
-    <button onclick="speakSelected()">🔊 Speak</button>
+    <br>
+    <button id="speakBtn">🔊 Speak Selected</button>
+    <div id="boneList"></div>
   </div>
 
-  <!-- Bone List -->
-  <div class="bone-list" id="boneList"></div>
+  <!-- Background Music -->
+  <audio id="bgMusic" autoplay loop>
+    <source src="https://cdn.pixabay.com/download/audio/2022/03/15/audio_2a9e67.mp3?filename=soft-ambient-music-10962.mp3" type="audio/mpeg">
+  </audio>
+
+  <!-- Three.js -->
+  <script src="https://cdn.jsdelivr.net/npm/three@0.150.1/build/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.150.1/examples/js/controls/OrbitControls.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.150.1/examples/js/loaders/GLTFLoader.js"></script>
 
   <script>
-    // ✅ Easy Mode (main bones only)
-    const easyBones = {
-      en: ["Skull","Mandible","Clavicle","Scapula","Sternum","Ribs","Humerus","Radius","Ulna","Pelvis","Femur","Patella","Tibia","Fibula"],
-      hi: ["खोपड़ी","हनु अस्थि","क्लैविकल","स्कैपुला","उरोस्थि","पसलियां","भुजास्थि","त्रिज्या अस्थि","अल्ना","श्रोणि","जांघ की हड्डी","घुटना अस्थि","टिबिया","फिबुला"]
-    };
-
-    // ✅ Hard Mode (all 206 bones grouped)
-    const hardBones = {
-      en: [
-        // Skull (22)
-        "Frontal Bone","Parietal Bone (Left)","Parietal Bone (Right)","Temporal Bone (Left)","Temporal Bone (Right)",
-        "Occipital Bone","Sphenoid Bone","Ethmoid Bone",
-        "Nasal Bone (2)","Maxilla (2)","Zygomatic Bone (2)","Palatine Bone (2)","Lacrimal Bone (2)","Inferior Nasal Concha (2)","Vomer","Mandible",
-        // Ear (6)
-        "Malleus (2)","Incus (2)","Stapes (2)",
-        // Throat (1)
-        "Hyoid Bone",
-        // Vertebral Column (26)
-        "Cervical Vertebrae (7)","Thoracic Vertebrae (12)","Lumbar Vertebrae (5)","Sacrum","Coccyx",
-        // Thorax (25)
-        "Sternum","Ribs (24)",
-        // Shoulder (4)
-        "Clavicle (2)","Scapula (2)",
-        // Arms (60 total)
-        "Humerus (2)","Radius (2)","Ulna (2)",
-        "Carpals (16)","Metacarpals (10)","Phalanges-Hand (28)",
-        // Pelvis (2)
-        "Hip Bone (2)",
-        // Legs (60 total)
-        "Femur (2)","Patella (2)","Tibia (2)","Fibula (2)",
-        "Tarsals (14)","Metatarsals (10)","Phalanges-Foot (28)"
+    // === Bone Data (Full 206 Bones) ===
+    const bones = {
+      easy: [
+        { en: "Skull", hi: "खोपड़ी" },
+        { en: "Spine", hi: "रीढ़" },
+        { en: "Rib Cage", hi: "पसलियां" },
+        { en: "Pelvis", hi: "श्रोणि" },
+        { en: "Arms", hi: "बांह" },
+        { en: "Legs", hi: "टांग" },
+        { en: "Hands", hi: "हाथ" },
+        { en: "Feet", hi: "पैर" }
       ],
-      hi: [
+      hard: [
         // Skull (22)
-        "ललाट अस्थि","पार्श्व अस्थि (बायां)","पार्श्व अस्थि (दायां)","कर्ण अस्थि (बायां)","कर्ण अस्थि (दायां)",
-        "पश्चकपाल अस्थि","स्फेनॉइड अस्थि","एथमॉइड अस्थि",
-        "नासिका अस्थि (2)","ऊपरी जबड़ा (2)","गाल की अस्थि (2)","तालु अस्थि (2)","अश्रु अस्थि (2)","निचली नासिका शंखिका (2)","वोमर","हनु अस्थि",
+        {en:"Frontal Bone", hi:"ललाट अस्थि"},
+        {en:"Parietal Bone (L)", hi:"पार्श्व अस्थि (बायां)"},
+        {en:"Parietal Bone (R)", hi:"पार्श्व अस्थि (दायां)"},
+        {en:"Temporal Bone (L)", hi:"कर्ण अस्थि (बायां)"},
+        {en:"Temporal Bone (R)", hi:"कर्ण अस्थि (दायां)"},
+        {en:"Occipital Bone", hi:"पश्चकपाल अस्थि"},
+        {en:"Sphenoid Bone", hi:"स्फेनॉइड अस्थि"},
+        {en:"Ethmoid Bone", hi:"एथमॉइड अस्थि"},
+        {en:"Nasal Bone (2)", hi:"नासिका अस्थि (2)"},
+        {en:"Maxilla (2)", hi:"ऊपरी जबड़ा (2)"},
+        {en:"Zygomatic Bone (2)", hi:"गाल की अस्थि (2)"},
+        {en:"Palatine Bone (2)", hi:"तालु अस्थि (2)"},
+        {en:"Lacrimal Bone (2)", hi:"अश्रु अस्थि (2)"},
+        {en:"Inferior Nasal Concha (2)", hi:"निचली नासिका शंखिका (2)"},
+        {en:"Vomer", hi:"वोमर"},
+        {en:"Mandible", hi:"हनु"},
         // Ear (6)
-        "मैलियस (2)","इन्कस (2)","स्टेप्स (2)",
-        // Throat (1)
-        "हायॉइड अस्थि",
+        {en:"Malleus (2)", hi:"मैलियस (2)"},
+        {en:"Incus (2)", hi:"इन्कस (2)"},
+        {en:"Stapes (2)", hi:"स्टेप्स (2)"},
+        // Hyoid
+        {en:"Hyoid Bone", hi:"हायॉइड अस्थि"},
         // Vertebral Column (26)
-        "ग्रीवा कशेरुकाएँ (7)","वक्ष कशेरुकाएँ (12)","कटि कशेरुकाएँ (5)","त्रिकास्थि","पुच्छास्थि",
+        {en:"Cervical Vertebrae (7)", hi:"ग्रीवा कशेरुकाएँ (7)"},
+        {en:"Thoracic Vertebrae (12)", hi:"वक्ष कशेरुकाएँ (12)"},
+        {en:"Lumbar Vertebrae (5)", hi:"कटि कशेरुकाएँ (5)"},
+        {en:"Sacrum", hi:"त्रिकास्थि"},
+        {en:"Coccyx", hi:"पुच्छास्थि"},
         // Thorax (25)
-        "उरोस्थि","पसलियां (24)",
+        {en:"Sternum", hi:"उरोस्थि"},
+        {en:"Ribs (24)", hi:"पसलियां (24)"},
         // Shoulder (4)
-        "क्लैविकल (2)","स्कैपुला (2)",
-        // Arms (60 total)
-        "भुजास्थि (2)","त्रिज्या अस्थि (2)","अल्ना (2)",
-        "कार्पल अस्थियाँ (16)","मेटाकार्पल अस्थियाँ (10)","हाथ की ऊँगली अस्थियाँ (28)",
+        {en:"Clavicle (2)", hi:"क्लैविकल (2)"},
+        {en:"Scapula (2)", hi:"स्कैपुला (2)"},
+        // Arms (60)
+        {en:"Humerus (2)", hi:"भुजास्थि (2)"},
+        {en:"Radius (2)", hi:"त्रिज्या अस्थि (2)"},
+        {en:"Ulna (2)", hi:"अल्ना (2)"},
+        {en:"Carpals (16)", hi:"कार्पल अस्थियाँ (16)"},
+        {en:"Metacarpals (10)", hi:"मेटाकार्पल अस्थियाँ (10)"},
+        {en:"Phalanges-Hand (28)", hi:"हाथ की ऊँगली अस्थियाँ (28)"},
         // Pelvis (2)
-        "श्रोणि अस्थि (2)",
-        // Legs (60 total)
-        "जांघ की हड्डी (2)","घुटना अस्थि (2)","टिबिया (2)","फिबुला (2)",
-        "टार्सल अस्थियाँ (14)","मेटाटार्सल अस्थियाँ (10)","पाँव की ऊँगली अस्थियाँ (28)"
+        {en:"Hip Bone (2)", hi:"श्रोणि अस्थि (2)"},
+        // Legs (60)
+        {en:"Femur (2)", hi:"जांघ की हड्डी (2)"},
+        {en:"Patella (2)", hi:"घुटना अस्थि (2)"},
+        {en:"Tibia (2)", hi:"टिबिया (2)"},
+        {en:"Fibula (2)", hi:"फिबुला (2)"},
+        {en:"Tarsals (14)", hi:"टार्सल अस्थियाँ (14)"},
+        {en:"Metatarsals (10)", hi:"मेटाटार्सल अस्थियाँ (10)"},
+        {en:"Phalanges-Foot (28)", hi:"पाँव की उंगलियां (28)"}
       ]
     };
 
-    const boneListDiv = document.getElementById("boneList");
-    const langSelect = document.getElementById("languageSelect");
-    const modeSelect = document.getElementById("modeSelect");
+    const boneList = document.getElementById("boneList");
+    const modeSelect = document.getElementById("mode");
+    const langSelect = document.getElementById("language");
+    const speakBtn = document.getElementById("speakBtn");
 
-    function loadBones() {
-      boneListDiv.innerHTML = "";
-      let set = (modeSelect.value === "easy") ? easyBones : hardBones;
-      set[langSelect.value].forEach((bone) => {
+    let selectedBone = null;
+
+    function renderBoneList() {
+      boneList.innerHTML = "";
+      let mode = modeSelect.value;
+      bones[mode].forEach((bone) => {
         const div = document.createElement("div");
-        div.textContent = bone;
-        div.onclick = () => speak(bone);
-        boneListDiv.appendChild(div);
-      });
-    }
-
-    function speakSelected() {
-      let selected = document.querySelector(".bone-list div:hover");
-      if (selected) speak(selected.textContent);
-    }
-
-    function speak(text) {
-      let utterance = new SpeechSynthesisUtterance(text);
-      utterance.lang = (langSelect.value === "hi") ? "hi-IN" : "en-US";
-      speechSynthesis.speak(utterance);
-    }
-
-    langSelect.addEventListener("change", loadBones);
-    modeSelect.addEventListener("change", loadBones);
-    loadBones();
-  </script>
-</body>
-</html>    const bonesMedium = [
-      {en:"Skull", hi:"खोपड़ी"},
-      {en:"Spine", hi:"रीढ़ की हड्डी"},
-      {en:"Ribs", hi:"पसलियां"},
-      {en:"Pelvis", hi:"श्रोणि"},
-      {en:"Femur", hi:"जांघ की हड्डी"},
-      {en:"Humerus", hi:"भुजा की हड्डी"},
-      {en:"Radius", hi:"त्रिज्या अस्थि"},
-      {en:"Ulna", hi:"अल्ना"},
-      {en:"Tibia", hi:"टिबिया"},
-      {en:"Fibula", hi:"फिबुला"}
-    ];
-
-    const bonesHard = [
-      // Skull (22)
-      {en:"Frontal Bone", hi:"ललाट अस्थि"},
-      {en:"Parietal Bone (Left)", hi:"पार्श्व अस्थि (बायां)"},
-      {en:"Parietal Bone (Right)", hi:"पार्श्व अस्थि (दायां)"},
-      {en:"Temporal Bone (Left)", hi:"कर्णास्थि (बायां)"},
-      {en:"Temporal Bone (Right)", hi:"कर्णास्थि (दायां)"},
-      {en:"Occipital Bone", hi:"पश्चकपाल अस्थि"},
-      {en:"Sphenoid Bone", hi:"कीलाकार अस्थि"},
-      {en:"Ethmoid Bone", hi:"जालिका अस्थि"},
-      {en:"Nasal Bone (2)", hi:"नासिका अस्थि (2)"},
-      {en:"Maxilla (2)", hi:"अधिकतम अस्थि (2)"},
-      {en:"Zygomatic Bone (2)", hi:"गाल अस्थि (2)"},
-      {en:"Palatine Bone (2)", hi:"तालु अस्थि (2)"},
-      {en:"Lacrimal Bone (2)", hi:"अश्रु अस्थि (2)"},
-      {en:"Inferior Nasal Concha (2)", hi:"निचला नासिका शंख (2)"},
-      {en:"Vomer", hi:"वोमर"},
-      {en:"Mandible", hi:"हनु अस्थि"},
-
-      // Ear Ossicles (6)
-      {en:"Malleus (2)", hi:"मैलियस (2)"},
-      {en:"Incus (2)", hi:"इंकस (2)"},
-      {en:"Stapes (2)", hi:"स्टेप्स (2)"},
-
-      // Hyoid
-      {en:"Hyoid Bone", hi:"हायॉइड अस्थि"},
-
-      // Spine (26)
-      {en:"Cervical Vertebrae (7)", hi:"गर्दन कशेरुक (7)"},
-      {en:"Thoracic Vertebrae (12)", hi:"वक्ष कशेरुक (12)"},
-      {en:"Lumbar Vertebrae (5)", hi:"कटि कशेरुक (5)"},
-      {en:"Sacrum", hi:"त्रिकास्थि"},
-      {en:"Coccyx", hi:"पुच्छास्थि"},
-
-      // Thorax (25)
-      {en:"Sternum", hi:"उरोस्थि"},
-      {en:"Ribs (24)", hi:"पसलियां (24)"},
-
-      // Shoulder Girdle (4)
-      {en:"Clavicle (2)", hi:"हंसली (2)"},
-      {en:"Scapula (2)", hi:"अंसपटल (2)"},
-
-      // Arm & Forearm
-      {en:"Humerus (2)", hi:"भुजा अस्थि (2)"},
-      {en:"Radius (2)", hi:"त्रिज्या अस्थि (2)"},
-      {en:"Ulna (2)", hi:"अल्ना (2)"},
-
-      // Hands (54)
-      {en:"Carpals (16)", hi:"कलाई अस्थि (16)"},
-      {en:"Metacarpals (10)", hi:"अंगुली मध्य अस्थि (10)"},
-      {en:"Phalanges (28)", hi:"अंगुली अस्थि (28)"},
-
-      // Pelvis
-      {en:"Hip Bone (2)", hi:"श्रोणि अस्थि (2)"},
-
-      // Legs
-      {en:"Femur (2)", hi:"जांघ अस्थि (2)"},
-      {en:"Patella (2)", hi:"घुटना अस्थि (2)"},
-      {en:"Tibia (2)", hi:"टिबिया (2)"},
-      {en:"Fibula (2)", hi:"फिबुला (2)"},
-
-      // Feet (52)
-      {en:"Tarsals (14)", hi:"एड़ी अस्थि (14)"},
-      {en:"Metatarsals (10)", hi:"पैर मध्य अस्थि (10)"},
-      {en:"Phalanges (28)", hi:"पैर की अंगुली अस्थि (28)"}
-    ];
-
-    function populateBoneList(mode){
-      const boneList=document.getElementById("boneList");
-      boneList.innerHTML="";
-      let dataset=(mode==="easy")?bonesEasy:(mode==="medium")?bonesMedium:bonesHard;
-      dataset.forEach(b=>{
-        const div=document.createElement("div");
-        div.className="bone-item";
-        div.textContent=(lang==="en")?b.en:b.hi;
-        div.onclick=()=>speak(div.textContent);
+        div.textContent = langSelect.value === "en" ? bone.en : bone.hi;
+        div.style.cursor = "pointer";
+        div.onclick = () => {
+          selectedBone = bone;
+          speakBone();
+        };
         boneList.appendChild(div);
       });
     }
 
-    function speak(text){
-      let utter=new SpeechSynthesisUtterance(text);
-      utter.lang=(lang==="en")?"en-US":"hi-IN";
-      speechSynthesis.speak(utter);
+    function speakBone() {
+      if (!selectedBone) return;
+      let msg = new SpeechSynthesisUtterance(
+        langSelect.value === "en" ? selectedBone.en : selectedBone.hi
+      );
+      msg.lang = langSelect.value === "en" ? "en-US" : "hi-IN";
+      window.speechSynthesis.speak(msg);
     }
 
-    function init(){
-      scene=new THREE.Scene();
-      camera=new THREE.PerspectiveCamera(60,window.innerWidth/window.innerHeight,0.1,100);
-      camera.position.set(0,1.6,3);
+    modeSelect.onchange = renderBoneList;
+    langSelect.onchange = renderBoneList;
+    speakBtn.onclick = speakBone;
 
-      renderer=new THREE.WebGLRenderer({canvas:document.getElementById("canvas"),antialias:true});
-      renderer.setSize(window.innerWidth,window.innerHeight);
+    renderBoneList();
 
-      controls=new THREE.OrbitControls(camera,renderer.domElement);
+    // === 3D Skeleton ===
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(50, window.innerWidth/window.innerHeight, 0.1, 1000);
+    camera.position.set(0, 1.5, 3);
 
-      const light=new THREE.HemisphereLight(0xffffff,0x222222,1.2);
-      scene.add(light);
+    const renderer = new THREE.WebGLRenderer({antialias:true});
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    document.body.appendChild(renderer.domElement);
 
-      animate();
-      window.addEventListener("resize",()=>renderer.setSize(window.innerWidth,window.innerHeight));
-    }
+    const controls = new THREE.OrbitControls(camera, renderer.domElement);
 
-    function loadModel(type){
-      if(currentModel){ scene.remove(currentModel); }
-      const loader=new THREE.GLTFLoader();
-      const url=(type==="male")
-        ?"https://threejs.org/examples/models/gltf/HumanSkeleton.glb"
-        :"https://threejs.org/examples/models/gltf/FemaleSkeleton.glb";
+    const light = new THREE.HemisphereLight(0xffffff, 0x444444, 1.2);
+    scene.add(light);
 
-      loader.load(url,(gltf)=>{
-        currentModel=gltf.scene;
-        scene.add(currentModel);
-      });
-    }
+    const loader = new THREE.GLTFLoader();
+    loader.load(
+      "https://raw.githubusercontent.com/AayushSinghCodes/skeleton-model/main/skeleton.glb", 
+      function(gltf) {
+        let skeleton = gltf.scene;
+        skeleton.scale.set(1.2,1.2,1.2);
+        scene.add(skeleton);
+      },
+      undefined,
+      function(error){ console.error(error); }
+    );
 
-    function animate(){
+    function animate() {
       requestAnimationFrame(animate);
-      renderer.render(scene,camera);
+      renderer.render(scene, camera);
     }
+    animate();
 
-    // === Init ===
-    init();
-    loadModel("male");
-    populateBoneList("easy");
-
-    // === UI Handlers ===
-    document.getElementById("modelSelect").onchange=(e)=> loadModel(e.target.value);
-    document.getElementById("langSelect").onchange=(e)=>{lang=e.target.value; populateBoneList(document.getElementById("modeSelect").value);}
-    document.getElementById("modeSelect").onchange=(e)=> populateBoneList(e.target.value);
-
-    function toggleMusic(){
-      let m=document.getElementById("bgMusic");
-      if(m.paused){m.play();} else {m.pause();}
-    }
+    window.addEventListener("resize", () => {
+      camera.aspect = window.innerWidth/window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
   </script>
 </body>
-  </html>
+</html>
